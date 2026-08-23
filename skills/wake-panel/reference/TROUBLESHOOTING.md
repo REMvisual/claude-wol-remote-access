@@ -453,6 +453,163 @@ ERROR: mkdir /share/.../container-station/homes: permission denied
 Then runtime `apk add … || true` is the only option. Keep the `|| true` so a
 no-internet start degrades to a usable shell rather than a crash loop.
 
+### Better: proxy the terminal through the panel instead of giving it its own port
+
+Binding ttyd to the tailnet on its own port works, but it is the weaker of the
+two designs and it fails in a specific, annoying way: **a tailnet ACL does not
+grant a new port automatically**, so a perfectly healthy terminal is unreachable
+until you edit the policy, and the symptom is a hang rather than a refusal.
+
+Mount it under the panel instead:
+
+```sh
+ttyd --interface lo --port 7681 --base-path /terminal --writable bash
+```
+
+and add a proxy route to the relay for `/terminal*`. Four things get better at
+once:
+
+- **No ACL change ever.** The panel's port is already permitted.
+- **One URL, one login, one home-screen icon.**
+- **ttyd leaves the network entirely** — loopback only, unreachable from the
+  tailnet, so the only way in is through the panel's auth.
+- **The plaintext credential disappears.** In proxy mode ttyd needs no
+  `--credential` at all, so nothing sits in `ps` or `docker inspect`. The
+  panel's hashed password becomes the single gate.
+
+`--base-path` is required: without it ttyd serves its assets and websocket from
+`/`, the page loads through the proxy, and then the websocket 404s.
+
+Have the proxy **drop any inbound `Authorization` header** rather than forwarding
+it. The request was already authorised by the panel; passing through a header you
+never validated lets a client aim credentials at ttyd through you.
+
+If the relay is a `BaseHTTPRequestHandler`, the proxy is a byte pipe: rebuild the
+request line and headers, add `Connection: close` for non-upgrade requests so the
+copy loop can end on EOF instead of parsing chunked framing, then `select()` on
+the two raw sockets. Stop using the handler's `wfile` once you start — it will
+re-frame a WebSocket stream.
+
+### Tailscale SSH will not enable on a NAS
+
+If you were planning to reach the relay host with Tailscale SSH instead of a key,
+check that it is supported *before* designing around it. On QNAP it is refused
+outright, at any version:
+
+```
+$ tailscale set --ssh=true --accept-risk=lose-ssh
+The Tailscale SSH server does not run on QNAP.
+$ tailscale debug prefs | grep RunSSH
+        "RunSSH": false,
+```
+
+This is a hardcoded platform check, not a configuration problem. Use ordinary
+sshd with a key instead — the tailnet still provides the encrypted transport and
+the ACL still bounds who may reach port 22.
+
+> **Tailscale SSH needs BOTH rule types when it *is* supported**: a network rule
+> permitting port 22 in `acls`, *and* a rule in the `ssh` section. Miss the first
+> and the packet filter drops the connection before the SSH policy is ever
+> evaluated — which reads as "Tailscale SSH is broken" rather than "the ACL
+> denies it". The network rule is also what plain sshd needs, so it is worth
+> adding either way.
+
+### Pin the key to the tailnet address, and remember tailnets are dual-stack
+
+An `authorized_keys` options prefix bounds a key to where it may be used:
+
+```
+from="100.x.y.z,fd7a:115c:a1e0::abcd",restrict,pty ssh-ed25519 AAAA... laptop
+```
+
+- **List the IPv6 address as well as the IPv4 one.** Every tailnet node has both,
+  and a v4-only `from=` silently rejects a connection that happened to arrive
+  over v6.
+- `restrict` disables agent forwarding, port forwarding and X11; `pty` puts back
+  the terminal you actually need. Without `pty` an interactive shell fails.
+- Revocation stays centralised despite being a local file: remove the device from
+  the tailnet and the address in `from=` can no longer be presented.
+
+---
+
+## SSH keys on Windows clients
+
+### "UNPROTECTED PRIVATE KEY FILE" survives `icacls /inheritance:r`
+
+`/inheritance:r` removes **inherited** ACEs only. An **explicit** ACE — commonly
+an orphaned SID left by a renamed or deleted account — survives it untouched, so
+ssh keeps refusing the key however many times you run it.
+
+Reset first, then lock it down:
+
+```powershell
+icacls "$env:USERPROFILE\.ssh\mykey" /reset
+icacls "$env:USERPROFILE\.ssh\mykey" /inheritance:r /grant:r "$(whoami):(F)"
+icacls "$env:USERPROFILE\.ssh\mykey"
+```
+
+`/reset` wipes explicit ACEs and restores inheritance; the second line then
+strips inheritance and leaves exactly one entry. The third prints the result —
+check it names a real principal.
+
+### The account name is not the profile folder name
+
+`C:\Users\jane` does **not** prove the account is `jane`. A renamed account keeps
+its original profile directory, so granting to the folder name fails:
+
+```
+jane: No mapping between account names and security IDs was done.
+```
+
+Use `whoami` (which returns `MACHINE\account`) and never infer the username from
+a path. The symptom ladder if you get this wrong is confusing, because each step
+looks like a different bug:
+
+| Error | Cause |
+|---|---|
+| `UNPROTECTED PRIVATE KEY FILE` / "too open" | an explicit orphan ACE |
+| `Permission denied` loading the key | granted to a principal that is not you |
+| `Enter passphrase for key` | **working** — this one is success |
+
+### Your key "works", but you were actually authenticating with a password
+
+If the host accepts passwords, a plain `ssh host` that succeeds proves nothing
+about your key — ssh silently falls back, and a passphrase prompt and a password
+prompt look nearly identical at a glance.
+
+Always prove it with the fallback disabled:
+
+```
+ssh -o PasswordAuthentication=no host "id"
+```
+
+Check what the server actually offers, too:
+
+```
+ssh -o PreferredAuthentications=none host
+# Permission denied (publickey,password,keyboard-interactive).
+```
+
+A relay host that still lists `password` is usually the weakest SSH surface in
+the estate, and it is often the one holding the keys to everything else.
+
+### Stop the passphrase prompt without stripping the passphrase
+
+Load the key into the Windows ssh-agent service, which persists keys across
+reboots:
+
+```powershell
+Get-Service ssh-agent | Set-Service -StartupType Automatic
+Start-Service ssh-agent
+ssh-add "$env:USERPROFILE\.ssh\mykey"
+```
+
+Prefer this to removing the passphrase. File permissions protect a key only while
+it sits on that filesystem; a passphrase keeps it useless to anyone who copies it
+off. This also matters if an agent or script needs to call ssh non-interactively —
+a passphrase prompt blocks it, and the agent removes the prompt without removing
+the protection.
+
 ---
 
 ## Relay host is a NAS

@@ -191,37 +191,54 @@ Both pieces ship with this skill:
 | Asset | Purpose |
 |---|---|
 | `assets/relay/terminal-run.sh` | run on the relay host; launches and verifies the terminal |
-| `assets/tools/set-terminal-password.ps1` | run locally; prompts and pipes the credential over SSH |
+| `assets/tools/set-terminal-password.ps1` | only for standalone mode (see below); prompts and pipes the credential over SSH |
 
-Shape that works:
+**Two modes. Prefer PROXY.**
+
+*Proxy mode (default, recommended)* — ttyd binds loopback with
+`--base-path /terminal`, and the relay proxies `/terminal*` behind its own auth:
 
 ```sh
-docker run -d --name <term> \
-  --network host --pid host --privileged \
-  --restart unless-stopped \
-  -v /:/host -v /var/run/docker.sock:/var/run/docker.sock \
-  -e TTYD_CRED="$CRED" \
-  alpine:3.20 sh -c '
-    apk add --no-cache ttyd bash openssh-client bind-tools iproute2 \
-        nmap tcpdump curl util-linux docker-cli ethtool || true
-    cat > /root/.bashrc <<"RC"
-alias nas="nsenter -t 1 -m -u -n -i -p -- sh"
-RC
-    exec ttyd --interface tailscale0 --port 7681 --writable \
-         --credential "$TTYD_CRED" bash
-  '
+ttyd --interface lo --port 7681 --base-path /terminal --writable bash
 ```
 
-Four things in that command are load-bearing and each has its own entry in
-TROUBLESHOOTING:
+No ACL change is ever needed (the panel's port is already permitted), there is
+one URL and one login, ttyd is unreachable from the network, and **no ttyd
+credential exists at all** — so no plaintext sits in `ps` or `docker inspect`.
+This requires adding a WebSocket-aware proxy route to the relay; see
+TROUBLESHOOTING for the shape.
 
-- **`--interface tailscale0`** — binds the tailnet address only. Never publish a
-  root shell on `0.0.0.0`.
+*Standalone mode* — ttyd binds the tailnet interface on its own port with
+`--credential`. Simpler to deploy, no relay changes, but it needs a tailnet ACL
+grant for that port and it carries a second, weaker credential:
+
+```sh
+ttyd --interface tailscale0 --port 7681 --writable --credential "$CRED" bash
+```
+
+Either way the container is the toolbox — a NAS BusyBox userland typically has no
+`nc`, no `python3`, no `dig`. Run it with `--pid host --privileged` and `/:/host`,
+then one alias gets a genuine root shell on the host:
+
+```sh
+alias nas='nsenter -t 1 -m -u -n -i -p -- sh'
+```
+
+`nsenter` beats `chroot /host` because it enters the host's real namespaces, so
+`/proc`, `/sys` and the host's own tooling all behave normally.
+
+Three flags are load-bearing in both modes, and each has its own TROUBLESHOOTING
+entry:
+
 - **`--writable`** — without it the terminal is read-only and looks broken.
 - **plain `bash`, no flags** — a `-i` passed to the child segfaults ttyd with an
   empty log, because `-i` is ttyd's own `--interface`.
-- **`|| true` on `apk add`** — a relay with no internet still gets a usable
-  shell instead of a crash loop.
+- **`|| true` on `apk add`** — a relay with no internet still gets a usable shell
+  instead of a crash loop.
+
+> This is a deliberately privileged container. The Docker socket alone already
+> grants host root, so `--privileged` adds convenience rather than exposure — but
+> be honest that the panel's password is what stands in front of it.
 
 **GATE — all four, in this order:**
 
@@ -231,9 +248,11 @@ TROUBLESHOOTING:
    the actual binding; do not trust the flag.
 3. An unauthenticated request returns **401**, and so does a request with *wrong*
    credentials. Prove the guard refuses, not just that the page loads.
-4. It is reachable from the user's phone. **A tailnet ACL will not grant a new
-   port automatically** — a bound, healthy service is unreachable until you add
-   it, and the failure looks like a hang rather than a refusal.
+4. It is reachable from the user's phone. In proxy mode this is automatic. In
+   standalone mode, **a tailnet ACL will not grant a new port automatically** —
+   a bound, healthy service is unreachable until you add it, and the failure
+   looks like a hang rather than a refusal, which is the main reason to prefer
+   proxy mode.
 
 Add the ACL rule **additively**, never by editing an existing rule: you are
 almost certainly connected through the tailnet while you edit it, and a
