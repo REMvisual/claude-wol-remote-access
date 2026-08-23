@@ -31,7 +31,9 @@ info "Downloading $TARBALL"
 curl -fsSL "$TARBALL" -o "$TMP/src.tar.gz" || fail "Download failed. Is '$VERSION' a valid branch or tag?"
 tar -xzf "$TMP/src.tar.gz" -C "$TMP" || fail "Extract failed"
 
-SRC="$(find "$TMP" -maxdepth 2 -type d -path "*/skills/$SKILL_NAME" | head -n 1)"
+# The archive extracts to <repo>-<ref>/skills/<name>, i.e. depth 3 under $TMP.
+# A too-shallow -maxdepth here silently finds nothing and aborts the install.
+SRC="$(find "$TMP" -maxdepth 4 -type d -path "*/skills/$SKILL_NAME" | head -n 1)"
 [ -n "$SRC" ] || fail "Could not find skills/$SKILL_NAME in the archive"
 [ -f "$SRC/SKILL.md" ] || fail "Archive looks wrong: no SKILL.md in $SRC"
 
