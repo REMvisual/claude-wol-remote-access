@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-08-23
+
+### Fixed
+- `install.sh` could never find the skill inside the downloaded archive. The
+  tarball extracts to `<repo>-<ref>/skills/<name>` (depth 3) but the search used
+  `-maxdepth 2`, so every install aborted with "Could not find skills/wake-panel
+  in the archive". Use v1.0.1 or later.
+
 ## [1.0.0] - 2026-08-23
 
 ### Added
