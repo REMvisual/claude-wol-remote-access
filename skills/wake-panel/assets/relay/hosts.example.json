@@ -1,0 +1,59 @@
+{
+  "_README": [
+    "Copy to hosts.json and edit. Restart the relay to apply.",
+    "",
+    "mac         REQUIRED. The WIRED NIC's MAC. Using the Wi-Fi or a virtual",
+    "            adapter's MAC is the single most common setup mistake - the",
+    "            panel looks fine and simply never wakes anything.",
+    "ip          LAN IP. Also used to derive the /24 directed broadcast.",
+    "probe_port  A TCP port open when the machine is up, used for the liveness",
+    "            dot. USE 22 - setup-host.ps1 opens it across all firewall",
+    "            profiles, so it is reliable. Do NOT default to 445: Windows 11",
+    "            puts new networks on the Public profile, which blocks File and",
+    "            Printer Sharing, so 445 is CLOSED on a fresh install and the",
+    "            panel would show the machine permanently offline. Verified on a",
+    "            clean Win11 25H2. NOT ping either - ICMP needs raw sockets",
+    "            (root) inside a container.",
+    "ssh_user    Omit to get wake + online/offline only, no stats or commands.",
+    "collector   Absolute path to the telemetry script ON that machine.",
+    "            USE FORWARD SLASHES even on Windows - PowerShell accepts them,",
+    "            and a single backslash is an invalid JSON escape that rejects",
+    "            the whole file. The relay then starts with zero hosts and a",
+    "            'not valid JSON' line in its log.",
+    "os          'windows' or 'linux'. Selects sleep/reboot/shutdown syntax.",
+    "wol_verified  Leave false until you have ACTUALLY woken the machine from a",
+    "            full shutdown. While false the relay refuses shutdown with a",
+    "            403, so a mis-tap cannot strand a machine you'd have to walk to."
+  ],
+
+  "listen_port": 8099,
+  "poll_seconds": 8,
+  "idle_after": 45,
+  "ssh_key": "/secrets/id_ed25519",
+
+  "hosts": {
+    "workstation": {
+      "label": "WORKSTATION",
+      "note": "main desktop",
+      "mac": "AA:BB:CC:DD:EE:FF",
+      "ip": "192.168.1.50",
+      "probe_port": 22,
+      "ssh_user": "alice",
+      "collector": "C:/Users/alice/telemetry.ps1",
+      "os": "windows",
+      "wol_verified": false
+    },
+
+    "server": {
+      "label": "SERVER",
+      "note": "linux box",
+      "mac": "11:22:33:44:55:66",
+      "ip": "192.168.1.60",
+      "probe_port": 22,
+      "ssh_user": "root",
+      "collector": "/usr/local/bin/telemetry.sh",
+      "os": "linux",
+      "wol_verified": false
+    }
+  }
+}

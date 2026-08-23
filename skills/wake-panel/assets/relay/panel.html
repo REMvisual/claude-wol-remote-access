@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0d10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Wake Panel</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9211;</text></svg>">
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;min-height:100dvh;background:#0b0d10;color:#e6e9ef;
+   font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+   padding:max(22px,env(safe-area-inset-top)) 18px max(22px,env(safe-area-inset-bottom))}
+  h1{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:#7d8797;font-weight:600;margin:0 0 18px}
+  .card{background:#151920;border:1px solid #232a35;border-radius:16px;padding:16px 17px;margin-bottom:13px}
+  .hdr{display:flex;align-items:center;gap:10px}
+  .dot{width:10px;height:10px;border-radius:50%;flex:none;background:#4a5262;transition:background .25s}
+  .dot.up{background:#3ddc84;box-shadow:0 0 11px #3ddc8466}
+  .name{font-size:18px;font-weight:650}
+  .up{margin-left:auto;font-size:12px;color:#7d8797;font-variant-numeric:tabular-nums}
+  .note{color:#6b7484;font-size:12px;margin:2px 0 0 20px}
+  .grid{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:14px 0 0;
+   font-size:13px;font-variant-numeric:tabular-nums}
+  .k{color:#6b7484}
+  .v{color:#cdd4e0}
+  .bar{height:4px;border-radius:2px;background:#232a35;overflow:hidden;margin-top:5px}
+  .bar>i{display:block;height:100%;background:#2f6df6;transition:width .4s}
+  .bar>i.warn{background:#f0a03c}.bar>i.crit{background:#e5484d}
+  .mdl{margin-top:9px;font-size:12px;color:#8792a3;overflow-wrap:anywhere}
+  .mdl b{color:#cdd4e0;font-weight:600}
+  .src{color:#5f6878;margin-left:7px;font-size:11px;white-space:nowrap}
+  .btns{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:7px;margin-top:14px}
+  button{padding:12px 6px;font-size:13px;font-weight:650;border-radius:10px;border:0;
+   background:#232a35;color:#cdd4e0;cursor:pointer;transition:opacity .15s,transform .08s}
+  button:active{transform:scale(.97)}
+  button:disabled{opacity:.3;cursor:default}
+  button.primary{background:#2f6df6;color:#fff}
+  button.danger{background:#3a2226;color:#e5848a}
+  .err{color:#8a6a3a;font-size:11.5px;margin-top:9px}
+  .log{margin-top:16px;color:#5f6878;font-size:12px;min-height:1.4em;text-align:center}
+</style>
+</head>
+<body>
+<h1>Wake Panel</h1>
+<div id="hosts"></div>
+<div class="log" id="log">&nbsp;</div>
+<script>
+const log = m => document.getElementById('log').textContent = m || ' ';
+let S = {};
+
+const dur = s => {
+  if (s == null) return '';
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return d ? `up ${d}d ${h}h` : h ? `up ${h}h ${m}m` : `up ${m}m`;
+};
+const cls = p => p >= 90 ? 'crit' : p >= 75 ? 'warn' : '';
+const bar = (used, total) => {
+  const p = total ? Math.round(used / total * 100) : 0;
+  return `<div class="bar"><i class="${cls(p)}" style="width:${p}%"></i></div>`;
+};
+
+function body(h) {
+  if (!h.up) return '';
+  if (!h.stats) return `<div class="err">${h.stats_error || 'no telemetry'}</div>`;
+  const s = h.stats, g = s.gpu, rows = [];
+
+  if (g) {
+    rows.push(['GPU', `${(g.name || '').replace('NVIDIA ', '')}`]);
+    rows.push(['', `${g.temp_c}°C &middot; ${g.util_pct}% &middot; ${g.power_w}W`
+      + (g.fan_pct != null ? ` &middot; fan ${g.fan_pct}%` : '')]);
+    rows.push(['VRAM', `${(g.vram_used / 1024).toFixed(1)} / ${(g.vram_tot / 1024).toFixed(1)} GB`
+      + bar(g.vram_used, g.vram_tot)]);
+  }
+  const cpuT = s.lhm && s.lhm.cpu_c != null ? ` &middot; ${s.lhm.cpu_c}°C` : '';
+  rows.push(['CPU', `${s.cpu_pct}%${cpuT}`]);
+  rows.push(['RAM', `${s.ram_used_gb} / ${s.ram_tot_gb} GB` + bar(s.ram_used_gb, s.ram_tot_gb)]);
+
+  let html = '<div class="grid">' + rows.map(r =>
+    `<div class="k">${r[0]}</div><div class="v">${r[1]}</div>`).join('') + '</div>';
+
+  // "on GPU" is the at-a-glance line, so it always shows when we know anything.
+  if (s.gpu_procs && s.gpu_procs.length)
+    html += `<div class="mdl">on GPU: ${s.gpu_procs.map(p => `<b>${p}</b>`).join(', ')}</div>`;
+  else if (g && g.vram_used > 2048)
+    html += `<div class="mdl">on GPU: <b>?</b> — ${(g.vram_used / 1024).toFixed(1)}GB held, nothing named</div>`;
+
+  // Named models underneath, only when a server actually told us one.
+  if (s.workloads && s.workloads.length)
+    html += s.workloads.map(w =>
+      `<div class="mdl"><b>${w.detail}</b><span class="src">${w.proc}:${w.port}</span></div>`).join('');
+
+  return html;
+}
+
+function btns(k, h) {
+  const off = !h.up, no = !h.can_command;
+  const b = (a, l, c, d) => `<button class="${c}" ${d ? 'disabled' : ''} onclick="act('${k}','${a}')">${l}</button>`;
+  return '<div class="btns">'
+    + b('wake', 'Wake', 'primary', !off)
+    + b('sleep', 'Sleep', '', off || no)
+    + b('reboot', 'Reboot', '', off || no)
+    + b('shutdown', 'Shut down', 'danger', off || no || !h.wol_verified)
+    + '</div>'
+    + (!h.wol_verified ? '<div class="err">Shutdown disabled — wake unverified on this machine</div>' : '');
+}
+
+function render() {
+  document.getElementById('hosts').innerHTML = Object.entries(S).map(([k, h]) => `
+    <div class="card">
+      <div class="hdr">
+        <span class="dot ${h.up ? 'up' : ''}"></span>
+        <span class="name">${h.label}</span>
+        <span class="up">${h.up && h.stats ? dur(h.stats.uptime_s) : h.up ? 'online' : 'offline'}</span>
+      </div>
+      <div class="note">${h.note}${h.up && h.age_s != null ? ` &middot; ${h.age_s}s ago` : ''}</div>
+      ${body(h)}${btns(k, h)}
+    </div>`).join('');
+}
+
+async function refresh() {
+  try {
+    const r = await fetch('/api/status');
+    if (r.status === 401) { location.href = '/login'; return; }
+    S = await r.json();
+    render();
+  } catch (e) { log('relay unreachable'); }
+}
+
+async function act(k, a) {
+  if (a === 'shutdown' && !confirm(`Shut down ${S[k].label}?`)) return;
+  log(a + '…');
+  try {
+    const r = await (await fetch(`/api/${a}?host=${k}`, { method: 'POST' })).json();
+    log(r.error ? ('error: ' + r.error) : (r.detail || a + ' sent'));
+  } catch (e) { log('request failed'); }
+  setTimeout(refresh, 2500);
+}
+
+refresh();
+setInterval(refresh, 6000);
+</script>
+</body>
+</html>

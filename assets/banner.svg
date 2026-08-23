@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-label="Wake Panel - Wake, monitor and power your machines from anywhere">
+  <title>Wake Panel</title>
+
+  <rect width="1200" height="300" fill="#0D1117"/>
+
+  <!-- logo: power glyph -->
+  <g transform="translate(80 88)">
+    <rect x="0" y="0" width="124" height="124" rx="28" fill="#161B22" stroke="#30363D" stroke-width="2"/>
+    <g transform="translate(62 62)" stroke="#3FB950" stroke-width="9" stroke-linecap="round" fill="none">
+      <path d="M -30 -8 A 34 34 0 1 0 30 -8"/>
+      <line x1="0" y1="-40" x2="0" y2="2"/>
+    </g>
+  </g>
+
+  <!-- title -->
+  <text x="256" y="132" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="58" font-weight="700" fill="#E6EDF3">Wake Panel</text>
+
+  <!-- subtitle -->
+  <text x="258" y="176" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="22" font-weight="400" fill="#8B949E">Wake, monitor and power your machines from anywhere on your tailnet</text>
+
+  <!-- inline badges -->
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="600">
+    <g transform="translate(258 202)">
+      <rect width="92" height="26" rx="13" fill="#1F6FEB"/>
+      <text x="46" y="18" text-anchor="middle" fill="#FFFFFF">Claude Code</text>
+    </g>
+    <g transform="translate(360 202)">
+      <rect width="60" height="26" rx="13" fill="#238636"/>
+      <text x="30" y="18" text-anchor="middle" fill="#FFFFFF">MIT</text>
+    </g>
+    <g transform="translate(430 202)">
+      <rect width="84" height="26" rx="13" fill="#21262D" stroke="#30363D"/>
+      <text x="42" y="18" text-anchor="middle" fill="#C9D1D9">Tailscale</text>
+    </g>
+    <g transform="translate(524 202)">
+      <rect width="106" height="26" rx="13" fill="#21262D" stroke="#30363D"/>
+      <text x="53" y="18" text-anchor="middle" fill="#C9D1D9">Wake-on-LAN</text>
+    </g>
+  </g>
+</svg>

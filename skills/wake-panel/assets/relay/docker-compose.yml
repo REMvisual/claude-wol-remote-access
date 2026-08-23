@@ -1,0 +1,41 @@
+# Wake Panel relay
+#
+# Adjust the two volume paths to wherever you put the files, then:
+#   docker compose up -d
+# On a QNAP: Container Station > Applications > Create > paste this.
+# On Synology/Unraid/Portainer: create a stack from this file.
+#
+# network_mode: host is NOT optional. A magic packet is a layer-2 broadcast; in
+# the default bridge network it dies inside the container's private subnet and
+# never reaches the LAN. The relay will look perfectly healthy and simply never
+# wake anything. Host mode also means the tailnet address reaches the service
+# with no port publishing.
+
+services:
+  wakepanel:
+    image: python:3.12-alpine
+    container_name: wakepanel
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      HOSTS_FILE: /app/hosts.json
+      SECRETS_FILE: /secrets/config.json
+    volumes:
+      # Application code + hosts.json. Edit and restart; no rebuild needed.
+      - /path/to/wakepanel:/app:ro
+      # SSH key + password hash. Keep this OUTSIDE any SMB/NFS share so it is
+      # not readable by anything browsing the network shares.
+      - /path/to/wakepanel-secrets:/secrets:ro
+    # `|| true` is deliberate: if the host has no internet at restart we still
+    # start and serve. app.py detects the missing ssh binary and degrades to
+    # wake + reachability. A remote-power tool that refuses to start when the
+    # network is flaky is worse than one with fewer features.
+    command:
+      - sh
+      - -c
+      - "apk add --no-cache openssh-client || true; exec python /app/app.py"
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "3"

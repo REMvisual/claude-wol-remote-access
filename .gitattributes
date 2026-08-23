@@ -1,0 +1,11 @@
+# Shell scripts MUST be LF. A CRLF checkout breaks the shebang with an opaque
+# "\r: command not found", and these are the files people curl and run.
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+
+# PowerShell is Windows-native; CRLF is correct and expected there.
+*.ps1 text eol=crlf
+
+# Binary
+*.png -text
