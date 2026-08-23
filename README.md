@@ -37,6 +37,27 @@ phone (anywhere) --Tailscale--> always-on device --LAN broadcast--> your PC
 > never touch the skill again. A standalone app that does this without Claude
 > Code is planned.
 
+## What it looks like
+
+<p align="center">
+  <img src="assets/panel.png" alt="Wake Panel: an always-on NAS relay plus two workstations, each showing live GPU temperature, VRAM, CPU and RAM, with wake / sleep / reboot / shutdown controls and a break-glass terminal" width="430">
+</p>
+
+Top card is the relay itself — load, RAM, disk, tailnet status, and whether the
+poller and watchdog are alive. Below it, one card per machine: GPU temperature,
+utilisation, power draw and fan, VRAM, CPU, RAM, uptime, and which services are
+answering.
+
+Note the amber warning on the middle machine:
+
+> **Wake will not work.** reachable only via tailnet; MAC not on this LAN
+> segment. Sleep or shut down and it will need a physical power button press.
+
+That machine has left the LAN, so a magic packet cannot reach it — the panel says
+so instead of offering a Wake button that would silently do nothing, and warns
+that shutting it down would strand it. The **Terminal** button at the bottom
+opens the optional break-glass shell.
+
 ## Why a relay is necessary
 
 A Wake-on-LAN magic packet is a **layer-2 broadcast**. Tailscale is layer 3 and
